@@ -24,31 +24,19 @@ from src.config import *
 # ==========================================================
 def setup_logging():
     """Setup logging configuration for the dashboard"""
-    # Create logs directory if it doesn't exist
-    log_dir = os.path.join(os.path.dirname(__file__), 'logs')
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # Create log filename with timestamp
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = os.path.join(log_dir, f'dashboard_{timestamp}.log')
-    
-    # Configure logging
+    # Configure logging to only output to console
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout)  # This will output to terminal
+            logging.StreamHandler(sys.stdout)
         ]
     )
-    
     # Create logger for this module
     logger = logging.getLogger('PyPSA_Dashboard')
     logger.info("="*60)
     logger.info("PyPSA HRES Model Dashboard Starting")
-    logger.info(f"Log file: {log_file}")
     logger.info("="*60)
-    
     return logger
 
 # Initialize logging

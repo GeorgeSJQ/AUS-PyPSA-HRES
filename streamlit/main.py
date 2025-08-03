@@ -11,7 +11,7 @@ import os
 import logging
 import streamlit as st
 
-# Configure logging
+# Configure logging to only output to console (no log files)
 logging.basicConfig(level=logging.INFO)
 
 # Add the parent directory to Python path for imports

@@ -50,35 +50,24 @@ def launch_dashboard():
     print("🚀 Starting PyPSA HRES Model Dashboard...")
     
     # Setup basic logging for launcher
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - LAUNCHER - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)]
-    )
-    
-    logger = logging.getLogger('Dashboard_Launcher')
-    logger.info("Launching PyPSA HRES Model Dashboard")
-    
+    # Only log to stdout, do not create log files
+    print("Launching PyPSA HRES Model Dashboard")
     # Get the directory of this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     main_py = os.path.join(script_dir, "main.py")
-    
-    logger.info(f"Script directory: {script_dir}")
-    logger.info(f"Main script path: {main_py}")
-    
+    print(f"Script directory: {script_dir}")
+    print(f"Main script path: {main_py}")
     try:
         # Launch streamlit
-        logger.info("Starting Streamlit server on localhost:8501")
+        print("Starting Streamlit server on localhost:8501")
         subprocess.run([
             sys.executable, "-m", "streamlit", "run", main_py,
             "--server.port=8501",
             "--server.address=localhost"
         ], cwd=script_dir)
     except KeyboardInterrupt:
-        logger.info("Dashboard stopped by user (Ctrl+C)")
         print("\n👋 Dashboard stopped by user")
     except Exception as e:
-        logger.error(f"Error launching dashboard: {e}")
         print(f"❌ Error launching dashboard: {e}")
 
 def main():
