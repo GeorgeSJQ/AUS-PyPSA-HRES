@@ -576,8 +576,6 @@ def create_time_series_plots(n):
         
         # Create form for dispatch plot settings
         with st.form("dispatch_plot_form"):
-            # Date range slider - full width row
-            st.subheader("Date Range Selection")
             
             # Create list of months from 2025-01 to 2050-12
             months = []
@@ -596,7 +594,6 @@ def create_time_series_plots(n):
             start_date, end_date = date_range
             
             # Plot options - second row
-            st.subheader("Plot Options")
             col1, col2, col3, col4, col5 = st.columns([0.15, 0.15, 0.4, 0.15, 0.15])
             with col1:
                 stack_plot = st.checkbox("Stack Plot", value=True)
@@ -645,8 +642,6 @@ def create_time_series_plots(n):
         
         # Create form for storage SOC plot settings
         with st.form("storage_soc_form"):
-            # Date range slider - full width row
-            st.subheader("Date Range Selection")
             
             # Create list of months from 2025-01 to 2050-12
             months = []
@@ -676,8 +671,6 @@ def create_time_series_plots(n):
                     st.plotly_chart(fig, use_container_width=True)
                 except Exception as e:
                     st.error(f"Error creating storage SOC plot: {str(e)}")
-        
-        
                     
     except Exception as e:
         st.error(f"Error in time series plotting: {str(e)}")
@@ -726,28 +719,51 @@ def create_detailed_economics_view(n):
 
 def create_generation_analysis(n):
     """Create detailed generation analysis."""
+    slider_min = n.snapshots.get_level_values('timestep').min().year
+    slider_max = n.snapshots.get_level_values('timestep').max().year
     try:
         # Generator capacities and details
         if hasattr(n, 'generators') and not n.generators.empty:
             st.subheader("Generator Details")
             
             # Filter for meaningful capacities
-            gen_data = n.generators[['carrier', 'p_nom_opt', 'capital_cost', 'marginal_cost']]
+            gen_data = n.generators[['carrier', 'p_nom_opt']]
             gen_data = gen_data[gen_data['p_nom_opt'] > 0.01]
-            
+            generation_by_technology = n.snapshot_weightings.generators @ n.generators_t.p.div(1e3)  # GWh
+
+            # Ensure both have the same order and only plot common indexes
+            common_indexes = gen_data.index.intersection(generation_by_technology.index)
+            gen_data = gen_data.loc[common_indexes]
+            generation_by_technology = generation_by_technology.loc[common_indexes]
+
+            # Assign consistent colors
+            color_palette = px.colors.qualitative.Plotly
+            color_map = {name: color_palette[i % len(color_palette)] for i, name in enumerate(common_indexes)}
+
             if not gen_data.empty:
-                st.dataframe(gen_data.round(3))
-                
-                # Capacity pie chart
-                fig_pie = go.Figure(data=[go.Pie(
+                fig_pie_capacity_mix = go.Figure(data=[go.Pie(
                     labels=gen_data.index,
                     values=gen_data['p_nom_opt'],
                     textinfo='label+percent',
+                    marker=dict(colors=[color_map[name] for name in gen_data.index]),
                     title="Capacity Mix"
                 )])
-                st.plotly_chart(fig_pie, use_container_width=True)
             else:
                 st.info("No generator capacities found")
+            if not generation_by_technology.empty:
+                fig_pie_generation_mix = go.Figure(data=[go.Pie(
+                    labels=generation_by_technology.index,
+                    values=generation_by_technology.values,
+                    textinfo='label+percent',
+                    marker=dict(colors=[color_map[name] for name in generation_by_technology.index]),
+                    title="Generation by Technology"
+                )])
+
+            col1, col2 = st.columns(2)
+            with col1:
+                col1.plotly_chart(fig_pie_capacity_mix, use_container_width=True)
+            with col2:
+                col2.plotly_chart(fig_pie_generation_mix, use_container_width=True)
         
         # Generator heatmap section
         st.subheader("Generator Output Heatmap")
@@ -761,12 +777,9 @@ def create_generation_analysis(n):
                 help="Choose the technology carrier to visualize in the heatmap"
             )
             
-            # Date range slider - full width row
-            st.subheader("Date Range Selection")
-            
-            # Create list of months from 2025-01 to 2050-12
+            # Create list of months from n.snapshots.index.min() to n.snapshots.index.max()
             months = []
-            for year in range(2025, 2051):
+            for year in range(slider_min, slider_max + 1):
                 for month in range(1, 13):
                     months.append(f"{year}-{month:02d}")
             
@@ -797,7 +810,43 @@ def create_generation_analysis(n):
                     st.plotly_chart(fig, use_container_width=True)
                 except Exception as e:
                     st.error(f"Error creating heatmap: {str(e)}")
+
+        # Monthly electrical production
+        st.subheader("Monthly Electrical Production")
+
+        # Create form for monthly electrical production settings
+        with st.form("monthly_electrical_production_form"):
             
+            # Create list of months from n.snapshots.index.min() to n.snapshots.index.max()
+            years = [str(year) for year in range(slider_min, slider_max + 1)]
+            
+            # Date range slider for heatmap
+            date_range = st.select_slider(
+                "Select Date Range for Monthly Production (Start - End)",
+                options=years,
+                value=(years[0], years[1]),  # Default: 2025 to 2026
+                help="Select start and end dates for the monthly production range",
+                key="electrical_date_range"
+            )
+
+            electrical_start_date, electrical_end_date = date_range
+
+            # Submit button
+            generate_monthly_electrical = st.form_submit_button("Generate Monthly Electrical Production", type="primary")
+
+        # Generate heatmap when form is submitted
+        if generate_monthly_electrical:
+            with st.spinner("Creating plot..."):
+                try:
+                    fig = plot_monthly_electric_production(
+                        n,
+                        start_year=electrical_start_date,
+                        end_year=electrical_end_date
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error creating plot: {str(e)}")
+
     except Exception as e:
         st.error(f"Error in generation analysis: {str(e)}")
 
@@ -860,13 +909,9 @@ def create_storage_analysis(n):
                     
                     st.plotly_chart(fig_energy, use_container_width=True)
 
-                # Storage SOC Heatmap section
-                st.subheader("Storage SOC Heatmap")
                 
                 # Create form for storage SOC heatmap settings
                 with st.form("storage_soc_heatmap_form"):
-                    # Date range slider - full width row
-                    st.subheader("Date Range Selection")
                     
                     # Create list of months from 2025-01 to 2050-12
                     months = []
