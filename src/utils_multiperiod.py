@@ -2944,9 +2944,7 @@ def plot_monthly_electric_production(
         xaxis=dict(tickmode='linear', tick0=1, dtick=1),
     )
     
-    fig.show()
-    
-    return monthly_avg
+    return fig
 
 def generate_multiperiod_overview(
     network: pypsa.Network, 
