@@ -474,7 +474,7 @@ def create_multiindex_snapshots(
         Start date string (e.g., "2025-01-01")
     end_date : str
         End date string (e.g., "2030-12-31")
-    freq : str, default "h"
+    freq : str, default "30min"
         Frequency for date range (e.g., "h" for hourly, "30min" for 30-minute intervals)
     investment_periods : List[int], optional
         List of investment period years (e.g., [2025, 2030, 2035])
@@ -592,6 +592,7 @@ def get_solar_trace(
         multi_reference_year: Optional[bool] = False,
         year_type: Optional[str] = 'calendar',  # 'calendar' or 'fy'
         investment_periods: Optional[List[int]] = None,
+        freq: Optional[str] = 'h',  # Frequency for date range
 ) -> pd.DataFrame:
     
     trace_dir = os.path.join(base_path, "data", "parsed_traces", "solar")
@@ -618,11 +619,13 @@ def get_solar_trace(
             directory=trace_dir,
             year_type=year_type,
         ).rename(columns={'Datetime':'DATETIME', 'Value': 'SOLAR_TRACE'})
-    
+    solar_trace['DATETIME'] = pd.to_datetime(solar_trace['DATETIME'])
+    if freq is not None:
+        solar_trace = solar_trace.groupby(pd.Grouper(key='DATETIME', freq=freq)).aggregate({'SOLAR_TRACE': 'mean'}).reset_index()
     # Convert to MultiIndex if investment periods are provided
     if investment_periods is not None:
         solar_trace = _create_multiindex_dataframe(solar_trace, investment_periods)
-    
+
     return solar_trace
 
 def get_wind_trace(
@@ -634,6 +637,7 @@ def get_wind_trace(
         multi_reference_year: Optional[bool] = False,
         year_type: Optional[str] = 'calendar',  # 'calendar' or 'fy'
         investment_periods: Optional[List[int]] = None,
+        freq: Optional[str] = 'h',  # Frequency for date range
 ) -> pd.DataFrame:
     
     trace_dir = os.path.join(base_path, "data", "parsed_traces", "wind")
@@ -659,7 +663,10 @@ def get_wind_trace(
             directory=trace_dir,
             year_type=year_type,
         ).rename(columns={'Datetime':'DATETIME', 'Value': 'WIND_TRACE'})
-    
+
+    wind_trace['DATETIME'] = pd.to_datetime(wind_trace['DATETIME'])
+    if freq is not None:
+        wind_trace = wind_trace.groupby(pd.Grouper(key='DATETIME', freq=freq)).aggregate({'WIND_TRACE': 'mean'}).reset_index()
     # Convert to MultiIndex if investment periods are provided
     if investment_periods is not None:
         wind_trace = _create_multiindex_dataframe(wind_trace, investment_periods)
@@ -678,6 +685,7 @@ def solar_trace_construction(
         multi_reference_year: Optional[bool] = False,
         year_type: Optional[str] = 'calendar',  # 'calendar' or 'fy'
         investment_periods: Optional[List[int]] = None,
+        freq: Optional[str] = 'h',  # Frequency for date range
 ) -> pd.DataFrame:
     """
     Create a DataFrame with timestamps for the entire period and fill with solar trace data.
@@ -694,7 +702,8 @@ def solar_trace_construction(
         solar_type=solar_type,
         multi_reference_year=multi_reference_year,
         year_type=year_type,
-        investment_periods=investment_periods
+        investment_periods=investment_periods,
+        freq=freq
     ).rename(columns={'SOLAR_TRACE': f'SOLAR_{build_year}'})
 
     # If we have a MultiIndex DataFrame, we need to work with the timestep level
@@ -738,7 +747,7 @@ def solar_trace_construction(
         solar_trace = solar_trace[~((dt_index.month == 2) & (dt_index.day == 29))]
         
         # Add backfilled row at the beginning of the first period
-        if len(solar_trace) > 0:
+        if freq is None or freq == '30min':
             first_period = solar_trace.index.get_level_values('period')[0]
             new_index = pd.MultiIndex.from_tuples(
                 [(first_period, pd.Timestamp(f"{start_year}-01-01 00:00:00"))],
@@ -763,7 +772,7 @@ def solar_trace_construction(
         solar_trace = solar_trace[~((solar_trace.index.month == 2) & (solar_trace.index.day == 29))]
         
         # Add backfilled row at the beginning
-        if len(solar_trace) > 0:
+        if freq is None or freq == '30min':
             new_index = pd.DatetimeIndex([pd.Timestamp(f"{start_year}-01-01 00:00:00")])
             new_row = pd.DataFrame(
                 np.nan,
@@ -790,6 +799,7 @@ def wind_trace_construction(
         multi_reference_year: Optional[bool] = False,
         year_type: Optional[str] = 'calendar',  # 'calendar' or 'fy'
         investment_periods: Optional[List[int]] = None,
+        freq: Optional[str] = 'h',  # Frequency for date range
 ) -> pd.DataFrame:
     """
     Create a DataFrame with timestamps for the entire period and fill with wind trace data.
@@ -807,6 +817,7 @@ def wind_trace_construction(
         multi_reference_year=multi_reference_year,
         year_type=year_type,
         investment_periods=investment_periods,
+        freq=freq
     ).rename(columns={'WIND_TRACE': f'WIND_{build_year}'})
 
     # If we have a MultiIndex DataFrame, we need to work with the timestep level
@@ -850,7 +861,7 @@ def wind_trace_construction(
         wind_trace = wind_trace[~((dt_index.month == 2) & (dt_index.day == 29))]
         
         # Add backfilled row at the beginning of the first period
-        if len(wind_trace) > 0:
+        if freq is None or freq == '30min':
             first_period = wind_trace.index.get_level_values('period')[0]
             new_index = pd.MultiIndex.from_tuples(
                 [(first_period, pd.Timestamp(f"{start_year}-01-01 00:00:00"))],
@@ -875,7 +886,7 @@ def wind_trace_construction(
         wind_trace = wind_trace[~((wind_trace.index.month == 2) & (wind_trace.index.day == 29))]
         
         # Add backfilled row at the beginning
-        if len(wind_trace) > 0:
+        if freq is None or freq == '30min':
             new_index = pd.DatetimeIndex([pd.Timestamp(f"{start_year}-01-01 00:00:00")])
             new_row = pd.DataFrame(
                 np.nan,
@@ -3265,6 +3276,7 @@ def calculate_system_lcoe(network: pypsa.Network) -> float:
     try:
         # Use PyPSA's statistics for accurate calculation
         stats = network.statistics()
+        weighting = network.snapshot_weightings['objective'].mean()
         
         # Get total energy consumption (sum of all loads)
         energy_balance = stats.groupby(level=0).sum()
@@ -3282,7 +3294,7 @@ def calculate_system_lcoe(network: pypsa.Network) -> float:
         
         if all(col in component_stats.columns for col in ["Capital Expenditure", "Operational Expenditure"]):
             total_costs = (component_stats["Capital Expenditure"] + 
-                          component_stats["Operational Expenditure"]*0.5).sum()
+                          component_stats["Operational Expenditure"] * weighting).sum()
         else:
             return np.nan
         
@@ -3481,4 +3493,3 @@ def export_detailed_results(network: pypsa.Network,
         except Exception as e:
             print(f"Warning: Could not save {name}: {e}")
     
-    return results
