@@ -3040,8 +3040,15 @@ def generate_multiperiod_overview(
             cf_available_filtered = cf_available[cf_available.index.isin(generator_carriers)]
             cf_available_renamed = cf_available_filtered.rename(lambda x: f"{x} CF AVAILABLE")
 
+            # Add actual capacity factor
+            cf_actual = ((stats["Supply"]) / 
+                        (stats["Optimal Capacity"] * 8760)).dropna()
+            # Filter to only generator carriers
+            cf_actual_filtered = cf_actual[cf_actual.index.isin(generator_carriers)]
+            cf_actual_renamed = cf_actual_filtered.rename(lambda x: f"{x} CF ACTUAL")
+
             # Add all capacity factors as a single concatenation to results_overview
-            results_overview = pd.concat([results_overview, cf_available_renamed])
+            results_overview = pd.concat([results_overview, cf_available_renamed, cf_actual_renamed])
             
         stats_by_component = network.statistics().groupby(level=0).sum()
             
