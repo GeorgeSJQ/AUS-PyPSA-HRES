@@ -2617,7 +2617,7 @@ def plot_generator_output_heatmap(n, carrier: str, start_date: str = None, end_d
         end_year = int(end_date.split('-')[0])
     
     # Filter data by year range
-    year_mask = (generation_data.index.year >= start_year) & (generation_data.index.year <= end_year)
+    year_mask = (generation_data.index.year >= start_year) & (generation_data.index.year < end_year)
     generation_data = generation_data[year_mask]
 
     # Group generators by carrier and sum their output
@@ -2702,7 +2702,7 @@ def plot_generator_output_heatmap(n, carrier: str, start_date: str = None, end_d
     year_range = f"{start_year}" if start_year == end_year else f"{start_year}-{end_year}"
     title_text = f"{carrier} Generator Output Heatmap ({year_range})"
     if start_year != end_year:
-        title_text += f"<br><sub>Data averaged across {end_year - start_year + 1} years</sub>"
+        title_text += f"<br><sub>Data averaged across {end_year - start_year} years</sub>"
     
     fig.update_layout(
         title=title_text,
@@ -2878,7 +2878,7 @@ def plot_storage_soc_heatmap(n, start_date: str = None, end_date: str = None):
         end_year = int(end_date.split('-')[0])
     
     # Filter data by year range
-    year_mask = (soc_data.index.year >= start_year) & (soc_data.index.year <= end_year)
+    year_mask = (soc_data.index.year >= start_year) & (soc_data.index.year < end_year)
     soc_data = soc_data[year_mask]
 
     # Remove empty columns
@@ -3015,7 +3015,7 @@ def plot_storage_soc_heatmap(n, start_date: str = None, end_date: str = None):
     year_range = f"{start_year}" if start_year == end_year else f"{start_year}-{end_year}"
     title_text = f"BESS State of Charge Heatmap ({year_range})"
     if start_year != end_year:
-        title_text += f"<br><sub>Data averaged across {end_year - start_year + 1} years</sub>"
+        title_text += f"<br><sub>Data averaged across {end_year - start_year} years</sub>"
     
     fig.update_layout(
         title=title_text,
