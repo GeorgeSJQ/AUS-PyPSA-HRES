@@ -11,8 +11,6 @@ import sys
 import os
 import subprocess
 import importlib.util
-import logging
-from datetime import datetime
 
 def check_package(package_name):
     """Check if a package is installed."""

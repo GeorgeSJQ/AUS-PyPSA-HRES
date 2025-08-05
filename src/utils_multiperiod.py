@@ -459,6 +459,75 @@ def filter_and_process_input_costs(
     
     return processed_df
 
+def create_multiindex_snapshots(
+    start_date: str, 
+    end_date: str, 
+    freq: str = "30min", 
+    investment_periods: List[int] = None
+) -> pd.MultiIndex:
+    """
+    Create a MultiIndex with 'period' and 'timestep' levels from date range parameters.
+    
+    Parameters:
+    -----------
+    start_date : str
+        Start date string (e.g., "2025-01-01")
+    end_date : str
+        End date string (e.g., "2030-12-31")
+    freq : str, default "h"
+        Frequency for date range (e.g., "h" for hourly, "30min" for 30-minute intervals)
+    investment_periods : List[int], optional
+        List of investment period years (e.g., [2025, 2030, 2035])
+        If None, uses unique years from the date range
+    
+    Returns:
+    --------
+    pd.MultiIndex
+        MultiIndex with levels ('period', 'timestep') excluding February 29th dates
+    """
+    # Create the date range
+    date_range = pd.date_range(start=start_date, end=end_date, freq=freq)
+    
+    # Remove February 29th dates
+    date_range = date_range[~((date_range.month == 2) & (date_range.day == 29))]
+    
+    # Extract years from date range
+    years = date_range.year
+    
+    # If investment_periods not provided, use unique years from date range
+    if investment_periods is None:
+        investment_periods = sorted(years.unique())
+    
+    # Assign periods to each timestamp
+    periods = []
+    for year in years:
+        # Find the appropriate investment period for this year
+        period = None
+        for i, inv_period in enumerate(investment_periods):
+            # Check if this is the last period or if year is before next period
+            if i == len(investment_periods) - 1 or year < investment_periods[i + 1]:
+                if year >= inv_period:
+                    period = inv_period
+                    break
+        
+        # If no period found, assign to the first period (for years before first period)
+        # or to the last period (for years after last period)
+        if period is None:
+            if year < investment_periods[0]:
+                period = investment_periods[0]
+            else:
+                period = investment_periods[-1]
+        
+        periods.append(period)
+    
+    # Create MultiIndex
+    multiindex = pd.MultiIndex.from_arrays(
+        [periods, date_range], 
+        names=['period', 'timestep']
+    )
+    
+    return multiindex
+
 # Solar and Wind Trace Functions ===========================================================
 def _create_multiindex_dataframe(df: pd.DataFrame, investment_periods: List[int]) -> pd.DataFrame:
     """
