@@ -635,7 +635,7 @@ def solar_trace_construction(
             solar_trace.loc[solar_trace.index.get_level_values('timestep').year >= build_year + lifetime, f'SOLAR_{build_year}'] = 0.0
         solar_trace = solar_trace[solar_trace.index.get_level_values('timestep').year < end_year]
         
-        if annual_degradation and lifetime:
+        if annual_degradation is not None and lifetime is not None:
             timestep_years = solar_trace.index.get_level_values('timestep').year
             for year in range(build_year, build_year + lifetime):
                 year_mask = timestep_years == year
@@ -650,7 +650,7 @@ def solar_trace_construction(
             solar_trace.loc[solar_trace['DATETIME'].dt.year >= build_year + lifetime, f'SOLAR_{build_year}'] = 0.0
         solar_trace = solar_trace[solar_trace['DATETIME'].dt.year < end_year]
         
-        if annual_degradation and lifetime:
+        if annual_degradation is not None and lifetime is not None:
             solar_trace['YEAR'] = solar_trace['DATETIME'].dt.year
             for year in range(build_year, build_year + lifetime):
                 year_mask = solar_trace['YEAR'] == year
@@ -661,6 +661,51 @@ def solar_trace_construction(
             solar_trace = solar_trace.drop(columns='YEAR')
         
         solar_trace = solar_trace.set_index('DATETIME')
+    
+    # Remove Feb 29th dates and add backfilled row at the beginning
+    if isinstance(solar_trace.index, pd.MultiIndex):
+        # Remove Feb 29th dates from MultiIndex
+        dt_index = solar_trace.index.get_level_values('timestep')
+        solar_trace = solar_trace[~((dt_index.month == 2) & (dt_index.day == 29))]
+        
+        # Add backfilled row at the beginning of the first period
+        if len(solar_trace) > 0:
+            first_period = solar_trace.index.get_level_values('period')[0]
+            new_index = pd.MultiIndex.from_tuples(
+                [(first_period, pd.Timestamp(f"{start_year}-01-01 00:00:00"))],
+                names=solar_trace.index.names
+            )
+            
+            # Create a DataFrame with NaN values for the new row
+            new_row = pd.DataFrame(
+                np.nan,
+                index=new_index,
+                columns=solar_trace.columns
+            )
+            
+            # Concatenate the new row and the existing DataFrame
+            solar_trace = pd.concat([new_row, solar_trace])
+            # Sort the index to maintain chronological order
+            solar_trace = solar_trace.sort_index()
+            # Backfill the NaN values
+            solar_trace = solar_trace.bfill()
+    else:
+        # Remove Feb 29th dates from regular DatetimeIndex
+        solar_trace = solar_trace[~((solar_trace.index.month == 2) & (solar_trace.index.day == 29))]
+        
+        # Add backfilled row at the beginning
+        if len(solar_trace) > 0:
+            new_index = pd.DatetimeIndex([pd.Timestamp(f"{start_year}-01-01 00:00:00")])
+            new_row = pd.DataFrame(
+                np.nan,
+                index=new_index,
+                columns=solar_trace.columns
+            )
+            
+            # Concatenate and backfill
+            solar_trace = pd.concat([new_row, solar_trace])
+            solar_trace = solar_trace.sort_index()
+            solar_trace = solar_trace.bfill()
         
     return solar_trace
 
@@ -702,7 +747,7 @@ def wind_trace_construction(
             wind_trace.loc[wind_trace.index.get_level_values('timestep').year >= build_year + lifetime, f'WIND_{build_year}'] = 0.0
         wind_trace = wind_trace[wind_trace.index.get_level_values('timestep').year < end_year]
         
-        if annual_degradation and lifetime:
+        if annual_degradation is not None and lifetime is not None:
             timestep_years = wind_trace.index.get_level_values('timestep').year
             for year in range(build_year, build_year + lifetime):
                 year_mask = timestep_years == year
@@ -716,8 +761,8 @@ def wind_trace_construction(
         if lifetime is not None:
             wind_trace.loc[wind_trace['DATETIME'].dt.year >= build_year + lifetime, f'WIND_{build_year}'] = 0.0
         wind_trace = wind_trace[wind_trace['DATETIME'].dt.year < end_year]
-        
-        if annual_degradation and lifetime:
+
+        if annual_degradation is not None and lifetime is not None:
             wind_trace['YEAR'] = wind_trace['DATETIME'].dt.year
             for year in range(build_year, build_year + lifetime):
                 year_mask = wind_trace['YEAR'] == year
@@ -728,6 +773,51 @@ def wind_trace_construction(
             wind_trace = wind_trace.drop(columns='YEAR')
         
         wind_trace = wind_trace.set_index('DATETIME')
+    
+    # Remove Feb 29th dates and add backfilled row at the beginning
+    if isinstance(wind_trace.index, pd.MultiIndex):
+        # Remove Feb 29th dates from MultiIndex
+        dt_index = wind_trace.index.get_level_values('timestep')
+        wind_trace = wind_trace[~((dt_index.month == 2) & (dt_index.day == 29))]
+        
+        # Add backfilled row at the beginning of the first period
+        if len(wind_trace) > 0:
+            first_period = wind_trace.index.get_level_values('period')[0]
+            new_index = pd.MultiIndex.from_tuples(
+                [(first_period, pd.Timestamp(f"{start_year}-01-01 00:00:00"))],
+                names=wind_trace.index.names
+            )
+            
+            # Create a DataFrame with NaN values for the new row
+            new_row = pd.DataFrame(
+                np.nan,
+                index=new_index,
+                columns=wind_trace.columns
+            )
+            
+            # Concatenate the new row and the existing DataFrame
+            wind_trace = pd.concat([new_row, wind_trace])
+            # Sort the index to maintain chronological order
+            wind_trace = wind_trace.sort_index()
+            # Backfill the NaN values
+            wind_trace = wind_trace.bfill()
+    else:
+        # Remove Feb 29th dates from regular DatetimeIndex
+        wind_trace = wind_trace[~((wind_trace.index.month == 2) & (wind_trace.index.day == 29))]
+        
+        # Add backfilled row at the beginning
+        if len(wind_trace) > 0:
+            new_index = pd.DatetimeIndex([pd.Timestamp(f"{start_year}-01-01 00:00:00")])
+            new_row = pd.DataFrame(
+                np.nan,
+                index=new_index,
+                columns=wind_trace.columns
+            )
+            
+            # Concatenate and backfill
+            wind_trace = pd.concat([new_row, wind_trace])
+            wind_trace = wind_trace.sort_index()
+            wind_trace = wind_trace.bfill()
         
     return wind_trace
 
@@ -2989,6 +3079,7 @@ def generate_multiperiod_overview(
     # Use PyPSA's built-in statistics method for comprehensive analysis
     try:
         stats = network.statistics().groupby(level=1).sum()
+        weighting = network.snapshot_weightings['objective'].mean()
         
         # Add component-wise metrics to overview
         metric_mappings = [
@@ -2999,12 +3090,16 @@ def generate_multiperiod_overview(
         
         for short_name, full_name in metric_mappings:
             if full_name in stats.columns:
-                component_stats = stats[full_name].rename(lambda x: f"{x} {short_name}")
+                component_stats = stats[full_name].copy()
+                # Apply weighting to OPEX values
+                if short_name == "OPEX":
+                    component_stats = component_stats * weighting
+                component_stats = component_stats.rename(lambda x: f"{x} {short_name}")
                 results_overview = pd.concat([results_overview, component_stats])
         
-        # Calculate totex (capex + opex) for each carrier
+        # Calculate totex (capex + weighted opex) for each carrier
         if all(col in stats.columns for col in ["Capital Expenditure", "Operational Expenditure"]):
-            totex_stats = (stats["Capital Expenditure"] + stats["Operational Expenditure"])
+            totex_stats = (stats["Capital Expenditure"] + stats["Operational Expenditure"] * weighting)
             totex_series = totex_stats.rename(lambda x: f"{x} TOTEX")
             results_overview = pd.concat([results_overview, totex_series])
                 
@@ -3118,7 +3213,7 @@ def calculate_system_lcoe(network: pypsa.Network) -> float:
         
         if all(col in component_stats.columns for col in ["Capital Expenditure", "Operational Expenditure"]):
             total_costs = (component_stats["Capital Expenditure"] + 
-                          component_stats["Operational Expenditure"]).sum()
+                          component_stats["Operational Expenditure"]*0.5).sum()
         else:
             return np.nan
         
