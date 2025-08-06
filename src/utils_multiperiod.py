@@ -3172,14 +3172,14 @@ def generate_multiperiod_overview(
             if full_name in stats.columns:
                 component_stats = stats[full_name].copy()
                 # Apply weighting to OPEX values
-                if short_name == "OPEX":
-                    component_stats = component_stats * weighting
+                # if short_name == "OPEX":
+                #     component_stats = component_stats * weighting
                 component_stats = component_stats.rename(lambda x: f"{x} {short_name}")
                 results_overview = pd.concat([results_overview, component_stats])
         
         # Calculate totex (capex + weighted opex) for each carrier
         if all(col in stats.columns for col in ["Capital Expenditure", "Operational Expenditure"]):
-            totex_stats = (stats["Capital Expenditure"] + stats["Operational Expenditure"] * weighting)
+            totex_stats = (stats["Capital Expenditure"] + stats["Operational Expenditure"])
             totex_series = totex_stats.rename(lambda x: f"{x} TOTEX")
             results_overview = pd.concat([results_overview, totex_series])
                 
@@ -3207,12 +3207,12 @@ def generate_multiperiod_overview(
             if 'LoadShed' in generator_carriers:
                 generator_carriers.discard('LoadShed')
             if thermal_carriers:
-                generator_carriers = generator_carriers - set(thermal_carriers)
+                thermal_gen = generator_carriers - set(thermal_carriers)
             
             cf_available = ((stats["Supply"] + stats["Curtailment"]) / 
                         (stats["Optimal Capacity"] * 8760)).dropna()
             # Filter to only generator carriers
-            cf_available_filtered = cf_available[cf_available.index.isin(generator_carriers)]
+            cf_available_filtered = cf_available[cf_available.index.isin(thermal_gen)]
             cf_available_renamed = cf_available_filtered.rename(lambda x: f"{x} CF AVAILABLE")
 
             # Add actual capacity factor
@@ -3294,7 +3294,7 @@ def calculate_system_lcoe(network: pypsa.Network) -> float:
         
         if all(col in component_stats.columns for col in ["Capital Expenditure", "Operational Expenditure"]):
             total_costs = (component_stats["Capital Expenditure"] + 
-                          component_stats["Operational Expenditure"] * weighting).sum()
+                          component_stats["Operational Expenditure"]).sum()
         else:
             return np.nan
         
