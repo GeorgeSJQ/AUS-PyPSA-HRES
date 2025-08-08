@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Main entry point for the PyPSA HRES Model Dashboard
 Run this file to launch the Streamlit application

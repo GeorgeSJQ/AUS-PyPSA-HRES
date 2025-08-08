@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Startup script for the PyPSA HRES Model Dashboard
 This script checks dependencies and launches the Streamlit app
