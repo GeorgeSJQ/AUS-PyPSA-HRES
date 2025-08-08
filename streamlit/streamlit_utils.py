@@ -9,6 +9,83 @@ import os
 
 from src.utils_multiperiod import *
 
+def initialize_plot_session_state():
+    """Initialize session state variables for storing plots."""
+    plot_keys = [
+        'dispatch_plot',
+        'storage_soc_plot', 
+        'generator_heatmap',
+        'monthly_electrical_plot',
+        'storage_soc_heatmap'
+    ]
+    
+    for key in plot_keys:
+        if key not in st.session_state:
+            st.session_state[key] = None
+
+def store_plot_in_session(plot_key: str, figure):
+    """Store a plot figure in session state."""
+    st.session_state[plot_key] = figure
+
+def clear_all_plots():
+    """Clear all stored plots from session state."""
+    plot_keys = [
+        'dispatch_plot',
+        'storage_soc_plot', 
+        'generator_heatmap',
+        'monthly_electrical_plot',
+        'storage_soc_heatmap'
+    ]
+    
+    for key in plot_keys:
+        if key in st.session_state:
+            st.session_state[key] = None
+
+def get_plot_count():
+    """Get the number of stored plots."""
+    plot_keys = [
+        'dispatch_plot',
+        'storage_soc_plot', 
+        'generator_heatmap',
+        'monthly_electrical_plot',
+        'storage_soc_heatmap'
+    ]
+    
+    return sum(1 for key in plot_keys if st.session_state.get(key) is not None)
+
+def display_stored_plots():
+    """Optional utility to show a summary of stored plots."""
+    plot_configs = [
+        ('dispatch_plot', 'Dispatch Plot'),
+        ('storage_soc_plot', 'Storage State of Charge'),
+        ('generator_heatmap', 'Generator Output Heatmap'),
+        ('monthly_electrical_plot', 'Monthly Electrical Production'),
+        ('storage_soc_heatmap', 'Storage SOC Heatmap')
+    ]
+    
+    # Count how many plots are stored
+    stored_plots = [(key, title) for key, title in plot_configs if st.session_state.get(key) is not None]
+    
+    if stored_plots:
+        with st.expander(f"📊 Plot Summary ({len(stored_plots)} stored)", expanded=False):
+            st.info("Generated plots are stored in session state and persist across form submissions.")
+            
+            # Show list of stored plots with clear options
+            for plot_key, plot_title in stored_plots:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"✅ {plot_title}")
+                with col2:
+                    if st.button(f"Clear", key=f"summary_clear_{plot_key}"):
+                        st.session_state[plot_key] = None
+                        st.rerun()
+            
+            # Add button to clear all plots
+            st.markdown("---")
+            if st.button("Clear All Plots", key="summary_clear_all"):
+                clear_all_plots()
+                st.rerun()
+
 def year_selector(
     label: str,
     min_year: int = 2020,
@@ -572,105 +649,131 @@ def load_results_from_file(n, filename: str):
 def create_time_series_plots(n):
     """Create time series plots for the results."""
     try:
+        # Initialize session state for plots
+        initialize_plot_session_state()
+        
         st.subheader("Dispatch Plots")
         
-        # Create form for dispatch plot settings
-        with st.form("dispatch_plot_form"):
+        # Dispatch Plot in expandable dropdown
+        with st.expander("📊 Generate Dispatch Plot", expanded=False):
+            # Create form for dispatch plot settings
+            with st.form("dispatch_plot_form"):
+                
+                # Create list of months from 2025-01 to 2050-12
+                months = []
+                for year in range(2025, 2051):
+                    for month in range(1, 13):
+                        months.append(f"{year}-{month:02d}")
+                
+                # Date range slider
+                date_range = st.select_slider(
+                    "Select Date Range (Start - End)",
+                    options=months,
+                    value=(months[0], months[12]),  # Default: 2025-01 to 2026-01
+                    help="Select start and end dates for the plot range"
+                )
+                
+                start_date, end_date = date_range
+                
+                # Plot options - second row
+                col1, col2, col3, col4, col5 = st.columns([0.15, 0.15, 0.4, 0.15, 0.15])
+                with col1:
+                    stack_plot = st.checkbox("Stack Plot", value=True)
+                with col2:
+                    plot_curtailment = st.checkbox("Plot Curtailment", value=False)
+                with col4:
+                    y_min = st.number_input("Y Min", value=-20)
+                with col5:
+                    y_max = st.number_input("Y Max", value=60)
+                
+                # Submit button
+                generate_dispatch = st.form_submit_button("Generate Dispatch Plot", type="primary")
             
-            # Create list of months from 2025-01 to 2050-12
-            months = []
-            for year in range(2025, 2051):
-                for month in range(1, 13):
-                    months.append(f"{year}-{month:02d}")
-            
-            # Date range slider
-            date_range = st.select_slider(
-                "Select Date Range (Start - End)",
-                options=months,
-                value=(months[0], months[12]),  # Default: 2025-01 to 2026-01
-                help="Select start and end dates for the plot range"
-            )
-            
-            start_date, end_date = date_range
-            
-            # Plot options - second row
-            col1, col2, col3, col4, col5 = st.columns([0.15, 0.15, 0.4, 0.15, 0.15])
-            with col1:
-                stack_plot = st.checkbox("Stack Plot", value=True)
-            with col2:
-                plot_curtailment = st.checkbox("Plot Curtailment", value=False)
-            with col4:
-                y_min = st.number_input("Y Min", value=-20)
-            with col5:
-                y_max = st.number_input("Y Max", value=60)
-            
-            # Submit button
-            generate_dispatch = st.form_submit_button("Generate Dispatch Plot", type="primary")
-        
-        # Generate plot when form is submitted
-        if generate_dispatch and not plot_curtailment:
-            with st.spinner("Creating dispatch plot..."):
-                try:
-                    fig = create_dispatch_plot(
-                        n, 
-                        start_date=start_date, 
-                        end_date=end_date, 
-                        stack=stack_plot, 
-                        y_range=[y_min, y_max]
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Error creating dispatch plot: {str(e)}")
+            # Generate and display plot within the same expander
+            if generate_dispatch and not plot_curtailment:
+                with st.spinner("Creating dispatch plot..."):
+                    try:
+                        fig = create_dispatch_plot(
+                            n, 
+                            start_date=start_date, 
+                            end_date=end_date, 
+                            stack=stack_plot, 
+                            y_range=[y_min, y_max]
+                        )
+                        # Store in session state and display immediately
+                        store_plot_in_session('dispatch_plot', fig)
+                        st.plotly_chart(fig, use_container_width=True)
+                        st.success("Dispatch plot generated!")
+                    except Exception as e:
+                        st.error(f"Error creating dispatch plot: {str(e)}")
 
-        elif generate_dispatch and plot_curtailment:
-            with st.spinner("Creating dispatch plot..."):
-                try:
-                    fig = create_dispatch_plot_with_curtailment(
-                        n, 
-                        start_date=start_date, 
-                        end_date=end_date, 
-                        stack=stack_plot, 
-                        y_range=[y_min, y_max],
-                        vre_carriers=['SOLAR_PV', 'WIND'],
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Error creating dispatch plot: {str(e)}")
+            elif generate_dispatch and plot_curtailment:
+                with st.spinner("Creating dispatch plot with curtailment..."):
+                    try:
+                        fig = create_dispatch_plot_with_curtailment(
+                            n, 
+                            start_date=start_date, 
+                            end_date=end_date, 
+                            stack=stack_plot, 
+                            y_range=[y_min, y_max],
+                            vre_carriers=['SOLAR_PV', 'WIND'],
+                        )
+                        # Store in session state and display immediately
+                        store_plot_in_session('dispatch_plot', fig)
+                        st.plotly_chart(fig, use_container_width=True)
+                        st.success("Dispatch plot with curtailment generated!")
+                    except Exception as e:
+                        st.error(f"Error creating dispatch plot: {str(e)}")
+            
+            # Display existing plot if it exists and no new plot was generated
+            elif st.session_state.get('dispatch_plot') is not None and not generate_dispatch:
+                st.plotly_chart(st.session_state.get('dispatch_plot'), use_container_width=True)
+                st.caption("Previously generated dispatch plot")
         
         # Storage SOC plot
         st.subheader("Storage State of Charge")
         
-        # Create form for storage SOC plot settings
-        with st.form("storage_soc_form"):
+        # Storage SOC Plot in expandable dropdown
+        with st.expander("🔋 Generate Storage SOC Plot", expanded=False):
+            # Create form for storage SOC plot settings
+            with st.form("storage_soc_form"):
+                
+                # Create list of months from 2025-01 to 2050-12
+                months = []
+                for year in range(2025, 2051):
+                    for month in range(1, 13):
+                        months.append(f"{year}-{month:02d}")
+                
+                # Date range slider for storage SOC
+                soc_date_range = st.select_slider(
+                    "Select Date Range for Storage SOC (Start - End)",
+                    options=months,
+                    value=(months[0], months[12]),  # Default: 2025-01 to 2026-01
+                    help="Select start and end dates for the storage SOC plot range",
+                    key="soc_date_range"
+                )
+                
+                soc_start_date, soc_end_date = soc_date_range
+                
+                # Submit button
+                generate_soc = st.form_submit_button("Generate Storage SOC Plot", type="primary")
             
-            # Create list of months from 2025-01 to 2050-12
-            months = []
-            for year in range(2025, 2051):
-                for month in range(1, 13):
-                    months.append(f"{year}-{month:02d}")
+            # Generate and display plot within the same expander
+            if generate_soc:
+                with st.spinner("Creating storage SOC plot..."):
+                    try:
+                        fig = plot_storage_soc(n, start_date=soc_start_date, end_date=soc_end_date)
+                        # Store in session state and display immediately
+                        store_plot_in_session('storage_soc_plot', fig)
+                        st.plotly_chart(fig, use_container_width=True)
+                        st.success("Storage SOC plot generated!")
+                    except Exception as e:
+                        st.error(f"Error creating storage SOC plot: {str(e)}")
             
-            # Date range slider for storage SOC
-            soc_date_range = st.select_slider(
-                "Select Date Range for Storage SOC (Start - End)",
-                options=months,
-                value=(months[0], months[12]),  # Default: 2025-01 to 2026-01
-                help="Select start and end dates for the storage SOC plot range",
-                key="soc_date_range"
-            )
-            
-            soc_start_date, soc_end_date = soc_date_range
-            
-            # Submit button
-            generate_soc = st.form_submit_button("Generate Storage SOC Plot", type="primary")
-        
-        # Generate SOC plot when form is submitted
-        if generate_soc:
-            with st.spinner("Creating storage SOC plot..."):
-                try:
-                    fig = plot_storage_soc(n, start_date=soc_start_date, end_date=soc_end_date)
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Error creating storage SOC plot: {str(e)}")
+            # Display existing plot if it exists and no new plot was generated
+            elif st.session_state.get('storage_soc_plot') is not None and not generate_soc:
+                st.plotly_chart(st.session_state.get('storage_soc_plot'), use_container_width=True)
+                st.caption("Previously generated storage SOC plot")
                     
     except Exception as e:
         st.error(f"Error in time series plotting: {str(e)}")
@@ -721,6 +824,10 @@ def create_generation_analysis(n):
     """Create detailed generation analysis."""
     slider_min = n.snapshots.get_level_values('timestep').min().year
     slider_max = n.snapshots.get_level_values('timestep').max().year
+    
+    # Initialize session state for plots
+    initialize_plot_session_state()
+    
     try:
         # Generator capacities and details
         if hasattr(n, 'generators') and not n.generators.empty:
@@ -768,90 +875,111 @@ def create_generation_analysis(n):
         # Generator heatmap section
         st.subheader("Generator Output Heatmap")
         
-        # Create form for heatmap settings
-        with st.form("heatmap_form"):
-            # Carrier selection
-            carrier_select = st.selectbox(
-                "Select Carrier for Heatmap",
-                options=["WIND", "SOLAR_PV", "GAS"],
-                help="Choose the technology carrier to visualize in the heatmap"
-            )
+        with st.expander("🌡️ Generate Heatmap", expanded=False):
+            # Create form for heatmap settings
+            with st.form("heatmap_form"):
+                # Carrier selection
+                carrier_select = st.selectbox(
+                    "Select Carrier for Heatmap",
+                    options=["WIND", "SOLAR_PV", "GAS"],
+                    help="Choose the technology carrier to visualize in the heatmap"
+                )
+                
+                # Create list of months from n.snapshots.index.min() to n.snapshots.index.max()
+                months = []
+                for year in range(slider_min, slider_max + 1):
+                    for month in range(1, 13):
+                        months.append(f"{year}-{month:02d}")
+                
+                # Date range slider for heatmap
+                heatmap_date_range = st.select_slider(
+                    "Select Date Range for Heatmap (Start - End)",
+                    options=months,
+                    value=(months[0], months[12]),  # Default: 2025-01 to 2026-01
+                    help="Select start and end dates for the heatmap range",
+                    key="heatmap_date_range"
+                )
+                
+                heatmap_start_date, heatmap_end_date = heatmap_date_range
+                
+                # Submit button
+                generate_heatmap = st.form_submit_button("Generate Heatmap", type="primary")
             
-            # Create list of months from n.snapshots.index.min() to n.snapshots.index.max()
-            months = []
-            for year in range(slider_min, slider_max + 1):
-                for month in range(1, 13):
-                    months.append(f"{year}-{month:02d}")
+            # Generate and display heatmap within the same expander
+            if generate_heatmap:
+                with st.spinner("Creating heatmap..."):
+                    try:
+                        fig = plot_generator_output_heatmap(
+                            n, 
+                            carrier=carrier_select, 
+                            start_date=heatmap_start_date, 
+                            end_date=heatmap_end_date
+                        )
+                        # Store in session state and display immediately
+                        store_plot_in_session('generator_heatmap', fig)
+                        st.plotly_chart(fig, use_container_width=True)
+                        st.success("Generator heatmap generated!")
+                    except Exception as e:
+                        st.error(f"Error creating heatmap: {str(e)}")
             
-            # Date range slider for heatmap
-            heatmap_date_range = st.select_slider(
-                "Select Date Range for Heatmap (Start - End)",
-                options=months,
-                value=(months[0], months[12]),  # Default: 2025-01 to 2026-01
-                help="Select start and end dates for the heatmap range",
-                key="heatmap_date_range"
-            )
-            
-            heatmap_start_date, heatmap_end_date = heatmap_date_range
-            
-            # Submit button
-            generate_heatmap = st.form_submit_button("Generate Heatmap", type="primary")
-        
-        # Generate heatmap when form is submitted
-        if generate_heatmap:
-            with st.spinner("Creating heatmap..."):
-                try:
-                    fig = plot_generator_output_heatmap(
-                        n, 
-                        carrier=carrier_select, 
-                        start_date=heatmap_start_date, 
-                        end_date=heatmap_end_date
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Error creating heatmap: {str(e)}")
+            # Display existing plot if it exists and no new plot was generated
+            elif st.session_state.get('generator_heatmap') is not None and not generate_heatmap:
+                st.plotly_chart(st.session_state.get('generator_heatmap'), use_container_width=True)
+                st.caption("Previously generated generator heatmap")
 
         # Monthly electrical production
         st.subheader("Monthly Electrical Production")
 
-        # Create form for monthly electrical production settings
-        with st.form("monthly_electrical_production_form"):
+        with st.expander("📅 Generate Monthly Production Plot", expanded=False):
+            # Create form for monthly electrical production settings
+            with st.form("monthly_electrical_production_form"):
+                
+                # Create list of years from n.snapshots.index.min() to n.snapshots.index.max()
+                years = [str(year) for year in range(slider_min, slider_max + 1)]
+                
+                # Date range slider for production
+                date_range = st.select_slider(
+                    "Select Date Range for Monthly Production (Start - End)",
+                    options=years,
+                    value=(years[0], years[1]),  # Default: first two years
+                    help="Select start and end dates for the monthly production range",
+                    key="electrical_date_range"
+                )
+
+                electrical_start_date, electrical_end_date = date_range
+
+                # Submit button
+                generate_monthly_electrical = st.form_submit_button("Generate Monthly Electrical Production", type="primary")
+
+            # Generate and display plot within the same expander
+            if generate_monthly_electrical:
+                with st.spinner("Creating monthly electrical production plot..."):
+                    try:
+                        fig = plot_monthly_electric_production(
+                            n,
+                            start_year=electrical_start_date,
+                            end_year=electrical_end_date
+                        )
+                        # Store in session state and display immediately
+                        store_plot_in_session('monthly_electrical_plot', fig)
+                        st.plotly_chart(fig, use_container_width=True)
+                        st.success("Monthly electrical production plot generated!")
+                    except Exception as e:
+                        st.error(f"Error creating plot: {str(e)}")
             
-            # Create list of months from n.snapshots.index.min() to n.snapshots.index.max()
-            years = [str(year) for year in range(slider_min, slider_max + 1)]
-            
-            # Date range slider for heatmap
-            date_range = st.select_slider(
-                "Select Date Range for Monthly Production (Start - End)",
-                options=years,
-                value=(years[0], years[1]),  # Default: 2025 to 2026
-                help="Select start and end dates for the monthly production range",
-                key="electrical_date_range"
-            )
-
-            electrical_start_date, electrical_end_date = date_range
-
-            # Submit button
-            generate_monthly_electrical = st.form_submit_button("Generate Monthly Electrical Production", type="primary")
-
-        # Generate heatmap when form is submitted
-        if generate_monthly_electrical:
-            with st.spinner("Creating plot..."):
-                try:
-                    fig = plot_monthly_electric_production(
-                        n,
-                        start_year=electrical_start_date,
-                        end_year=electrical_end_date
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Error creating plot: {str(e)}")
+            # Display existing plot if it exists and no new plot was generated
+            elif st.session_state.get('monthly_electrical_plot') is not None and not generate_monthly_electrical:
+                st.plotly_chart(st.session_state.get('monthly_electrical_plot'), use_container_width=True)
+                st.caption("Previously generated monthly electrical production plot")
 
     except Exception as e:
         st.error(f"Error in generation analysis: {str(e)}")
 
 def create_storage_analysis(n):
     """Create detailed storage analysis."""
+    # Initialize session state for plots
+    initialize_plot_session_state()
+    
     try:
         # Storage unit details
         if hasattr(n, 'storage_units') and not n.storage_units.empty:
@@ -910,41 +1038,53 @@ def create_storage_analysis(n):
                     st.plotly_chart(fig_energy, use_container_width=True)
 
                 
-                # Create form for storage SOC heatmap settings
-                with st.form("storage_soc_heatmap_form"):
-                    
-                    # Create list of months from 2025-01 to 2050-12
-                    months = []
-                    for year in range(2025, 2051):
-                        for month in range(1, 13):
-                            months.append(f"{year}-{month:02d}")
-                    
-                    # Date range slider for storage SOC heatmap
-                    storage_heatmap_date_range = st.select_slider(
-                        "Select Date Range for Storage SOC Heatmap (Start - End)",
-                        options=months,
-                        value=(months[0], months[12]),  # Default: 2025-01 to 2026-01
-                        help="Select start and end dates for the storage SOC heatmap range",
-                        key="storage_heatmap_date_range"
-                    )
-                    
-                    storage_heatmap_start_date, storage_heatmap_end_date = storage_heatmap_date_range
-                    
-                    # Submit button
-                    generate_storage_heatmap = st.form_submit_button("Generate Storage SOC Heatmap", type="primary")
+                # Storage SOC Heatmap in expandable dropdown
+                st.subheader("Storage SOC Heatmap")
                 
-                # Generate storage SOC heatmap when form is submitted
-                if generate_storage_heatmap:
-                    with st.spinner("Creating storage SOC heatmap..."):
-                        try:
-                            fig = plot_storage_soc_heatmap(
-                                n, 
-                                start_date=storage_heatmap_start_date, 
-                                end_date=storage_heatmap_end_date
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-                        except Exception as e:
-                            st.error(f"Error creating storage SOC heatmap: {str(e)}")
+                with st.expander("🌡️ Generate Storage SOC Heatmap", expanded=False):
+                    # Create form for storage SOC heatmap settings
+                    with st.form("storage_soc_heatmap_form"):
+                        
+                        # Create list of months from 2025-01 to 2050-12
+                        months = []
+                        for year in range(2025, 2051):
+                            for month in range(1, 13):
+                                months.append(f"{year}-{month:02d}")
+                        
+                        # Date range slider for storage SOC heatmap
+                        storage_heatmap_date_range = st.select_slider(
+                            "Select Date Range for Storage SOC Heatmap (Start - End)",
+                            options=months,
+                            value=(months[0], months[12]),  # Default: 2025-01 to 2026-01
+                            help="Select start and end dates for the storage SOC heatmap range",
+                            key="storage_heatmap_date_range"
+                        )
+                        
+                        storage_heatmap_start_date, storage_heatmap_end_date = storage_heatmap_date_range
+                        
+                        # Submit button
+                        generate_storage_heatmap = st.form_submit_button("Generate Storage SOC Heatmap", type="primary")
+                    
+                    # Generate and display storage SOC heatmap within the same expander
+                    if generate_storage_heatmap:
+                        with st.spinner("Creating storage SOC heatmap..."):
+                            try:
+                                fig = plot_storage_soc_heatmap(
+                                    n, 
+                                    start_date=storage_heatmap_start_date, 
+                                    end_date=storage_heatmap_end_date
+                                )
+                                # Store in session state and display immediately
+                                store_plot_in_session('storage_soc_heatmap', fig)
+                                st.plotly_chart(fig, use_container_width=True)
+                                st.success("Storage SOC heatmap generated!")
+                            except Exception as e:
+                                st.error(f"Error creating storage SOC heatmap: {str(e)}")
+                    
+                    # Display existing plot if it exists and no new plot was generated
+                    elif st.session_state.get('storage_soc_heatmap') is not None and not generate_storage_heatmap:
+                        st.plotly_chart(st.session_state.get('storage_soc_heatmap'), use_container_width=True)
+                        st.caption("Previously generated storage SOC heatmap")
             else:
                 st.info("No storage capacities found")
         
